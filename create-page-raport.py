@@ -9,10 +9,10 @@ from html import escape
 
 from confluence_common import CONFLUENCE_URL, get_session, load_spacekeys
 
-REPORT_SPACE = "TKR"                      # space where the report page will live
+REPORT_SPACE = "SEC"                      # space where the report page will live
 REPORT_TITLE = "Confluence security report"
 PREVIEW_FILE = "report-preview.html"
-SCRIPT_VERSION = "v6 (current groups / suggested groups / total views)"  # ADDED: shown in console and on the page
+SCRIPT_VERSION = "v7 (current groups / suggested groups / total views)"  # ADDED: shown in console and on the page
 
 
 def load_json(filename):
@@ -46,6 +46,16 @@ def build_table(space_keys, groups, activity):
     return "<table><tbody>" + "".join(rows) + "</tbody></table>"
 
 
+# ADDED: shows the HTTP code and the message from Confluence instead of a bare error
+def check_response(response, action):
+    if not response.ok:
+        raise SystemExit(
+            f"{action} failed: HTTP {response.status_code}\n"
+            f"{response.text[:500]}\n\n"
+            f"Check that REPORT_SPACE = '{REPORT_SPACE}' is a real space key and that the user "
+            f"of the token can view the space and create pages in it.")
+
+
 def find_page(session, title):
     """Return the existing report page (id + version) or None."""
     response = session.get(
@@ -53,7 +63,7 @@ def find_page(session, title):
         params={"spaceKey": REPORT_SPACE, "title": title, "expand": "version"},
         timeout=30,
     )
-    response.raise_for_status()
+    check_response(response, f"Looking for the report page in space {REPORT_SPACE}")  # CHANGED
     results = response.json()["results"]
     return results[0] if results else None
 
@@ -74,7 +84,7 @@ def save_page(session, title, body):
     else:
         response = session.post(f"{CONFLUENCE_URL}/rest/api/content", json=payload, timeout=30)
 
-    response.raise_for_status()
+    check_response(response, "Saving the report page")  # CHANGED
     page = response.json()
     return CONFLUENCE_URL + page["_links"]["webui"]
 
