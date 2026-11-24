@@ -1,14 +1,10 @@
-"""Create (or update) a Confluence page with one table row per space key.
-
-Reads: spacekeys.txt, groups.json, activity.json (run the check scripts first).
-"""
 import json
 from datetime import date
 from html import escape
 
 from confluence_common import CONFLUENCE_URL, get_session, load_spacekeys
 
-REPORT_SPACE = "SEC"                      # space where the report page will live
+REPORT_SPACE = "SEC"
 REPORT_TITLE = "Confluence security report"
 
 

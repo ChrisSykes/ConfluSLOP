@@ -1,7 +1,3 @@
-"""Run all checks one after another and then create the report page.
-
-If any script fails, we stop, so the report is never built from old or partial data.
-"""
 import subprocess
 import sys
 from pathlib import Path
@@ -13,7 +9,6 @@ SCRIPTS = [
     "create-page-raport.py",
 ]
 
-# Run from the folder where the scripts live, so the .txt/.json files are found
 SCRIPT_DIR = Path(__file__).resolve().parent
 
 
