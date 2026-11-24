@@ -28,6 +28,10 @@ RESULT_FILE = "groups.json"
 # Example: ALLOWED_EXTRA_GROUPS = ["sec-confluence-users"]
 ALLOWED_EXTRA_GROUPS = []
 
+# CHANGED: the "Current groups in space" column shows ALL groups found in the space.
+# To show only groups that start with some text, set it here, e.g. "sec-confluence-"
+CURRENT_GROUPS_PREFIX = ""
+
 
 class GroupNameChecker:
     """Knows the naming convention and compares it with the groups found in a space."""
@@ -54,8 +58,9 @@ class GroupNameChecker:
         else:
             status = "Yes"
 
-        # only groups starting with "sec-confluence-" are shown in the report column
-        current = [name for name in found_groups if name.lower().startswith("sec-confluence-")]
+        # CHANGED: groups shown in the report column (all groups unless a prefix is set above)
+        current = [name for name in found_groups
+                   if name.lower().startswith(CURRENT_GROUPS_PREFIX.lower())]
 
         return {
             "status": status,
