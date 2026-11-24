@@ -1,14 +1,15 @@
+"""Collect all space keys (without personal spaces) and save them to spacekeys.txt."""
 from confluence_common import SPACEKEYS_FILE, get_all, get_session
 
 
 def get_space_keys(session):
-
+    # type=global returns only normal spaces, personal spaces are left out
     spaces = get_all(session, "/rest/api/space", {"type": "global", "status": "current"})
 
     keys = []
     for space in spaces:
         key = space["key"]
-        if key.startswith("~"):
+        if key.startswith("~"):  # personal spaces start with ~, just in case
             continue
         keys.append(key)
     return sorted(keys)

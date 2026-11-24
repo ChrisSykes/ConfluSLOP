@@ -1,11 +1,17 @@
+"""Create (or update) a Confluence page with one table row per space key.
+
+Reads: spacekeys.txt, groups.json, activity.json (run the check scripts first).
+"""
+import argparse
 import json
 from datetime import date
 from html import escape
 
 from confluence_common import CONFLUENCE_URL, get_session, load_spacekeys
 
-REPORT_SPACE = "SEC"
+REPORT_SPACE = "SEC"                      # space where the report page will live
 REPORT_TITLE = "Confluence security report"
+PREVIEW_FILE = "report-preview.html"
 
 
 def load_json(filename):
@@ -18,22 +24,26 @@ def load_json(filename):
 
 
 def build_table(space_keys, groups, activity):
-    header = ["Space key", "Status", "Wrong groups", "Missing groups",
-              "Views (90d)", "Edits (90d)"]
+    # CHANGED: "Wrong groups" and "Missing groups" replaced by one "AD in space" column
+    header = ["Space key", "AD in space", "Status",
+              "Visitors (90d)", "Views (90d)", "Contributors (90d)"]
     rows = ["<tr>" + "".join(f"<th>{h}</th>" for h in header) + "</tr>"]
 
     for key in space_keys:
         g = groups.get(key, {})
         a = activity.get(key, {})
+
+        # every cell is escaped, the groups are put one under another
+        # CHANGED: "AD in space" shows the groups currently in the space (key "current_groups")
         cells = [
-            key,
-            g.get("status", "n/a"),
-            ", ".join(g.get("groups_wrong", [])),
-            ", ".join(g.get("groups_missing", [])),
-            a.get("views", "n/a"),
-            a.get("edits", "n/a"),
+            escape(key),
+            "<br/>".join(escape(name) for name in g.get("current_groups", [])),
+            escape(g.get("status", "n/a")),
+            escape(str(a.get("visitors", "n/a"))),
+            escape(str(a.get("views", "n/a"))),
+            escape(str(a.get("contributors", "n/a"))),
         ]
-        rows.append("<tr>" + "".join(f"<td>{escape(str(c))}</td>" for c in cells) + "</tr>")
+        rows.append("<tr>" + "".join(f"<td>{c}</td>" for c in cells) + "</tr>")
 
     return "<table><tbody>" + "".join(rows) + "</tbody></table>"
 
@@ -72,10 +82,20 @@ def save_page(session, title, body):
 
 
 if __name__ == "__main__":
-    session = get_session()
+    # ADDED: --dry-run builds the report but does not touch Confluence
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dry-run", action="store_true",
+                        help="do not create/update the page, save a preview file instead")
+    args = parser.parse_args()
 
     table = build_table(load_spacekeys(), load_json("groups.json"), load_json("activity.json"))
     body = f"<p>Generated: {date.today().isoformat()}</p>{table}"
 
-    url = save_page(session, REPORT_TITLE, body)
-    print(f"Report page: {url}")
+    if args.dry_run:
+        # ADDED: save the page content locally so you can check it
+        with open(PREVIEW_FILE, "w", encoding="utf-8") as f:
+            f.write(body)
+        print(f"Dry run: page was NOT created. Preview saved to {PREVIEW_FILE}")
+    else:
+        url = save_page(get_session(), REPORT_TITLE, body)
+        print(f"Report page: {url}")
