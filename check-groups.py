@@ -6,10 +6,10 @@ Expected groups for space ABC (case does not matter):
     sec-confluence-ABC-Admin
 
 Status:
-    Yes                all three groups are in the space, no other groups
-    No                 all three groups are in the space, but there are other groups too
-    missing AD groups  one or more of the three groups are not in the space
-                       (if both apply, "missing AD groups" wins)
+    Custom groups naming  the space has groups that do not follow the naming convention
+    missing groups        no custom groups, but one or more of the three groups are missing
+    Yes                   all three groups are in the space and nothing else
+    (if both apply, "Custom groups naming" wins)
 
 Only groups are checked. Users added directly are ignored.
 Results are saved to groups.json.
@@ -37,24 +37,31 @@ class GroupNameChecker:
     def expected_groups(self, space_key):
         return [f"sec-confluence-{space_key}-{suffix}" for suffix in self.SUFFIXES]
 
+    # CHANGED: new status logic, plus "suggested_groups" and a filtered "current_groups"
     def check(self, space_key, found_groups):
         # Names are compared in lowercase, so the check is NOT case sensitive
-        expected = {name.lower() for name in self.expected_groups(space_key)}
+        expected = {name.lower(): name for name in self.expected_groups(space_key)}
         allowed = {name.lower() for name in ALLOWED_EXTRA_GROUPS}
         found = {name.lower() for name in found_groups}
 
-        missing = expected - found                # expected groups not in the space
-        wrong = found - expected - allowed        # any other group
+        missing = [expected[name] for name in expected if name not in found]
+        custom = found - set(expected) - allowed   # groups that do not follow the convention
 
-        if missing:
-            status = "missing AD groups"
-        elif wrong:
-            status = "No"
+        if custom:
+            status = "Custom groups naming"
+        elif missing:
+            status = "missing groups"
         else:
             status = "Yes"
 
-        # CHANGED: users are no longer part of the check or of the result
-        return {"current_groups": sorted(found_groups), "status": status}
+        # only groups starting with "sec-confluence-" are shown in the report column
+        current = [name for name in found_groups if name.lower().startswith("sec-confluence-")]
+
+        return {
+            "status": status,
+            "current_groups": sorted(current),
+            "suggested_groups": sorted(missing),   # groups that should be added to the space
+        }
 
 
 def get_permissions(session, space_key):
@@ -116,7 +123,8 @@ if __name__ == "__main__":
 
         results[space_key] = result
         # CHANGED: also print the groups that were found, so you can see why a status was set
-        print(f"{space_key}: {result['status']}  | groups found: {', '.join(result['current_groups']) or '-'}")
+        # CHANGED: print ALL groups found (also custom ones), so you can see why a status was set
+        print(f"{space_key}: {result['status']}  | all groups found: {', '.join(sorted(groups)) or '-'}")
 
     with open(RESULT_FILE, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)

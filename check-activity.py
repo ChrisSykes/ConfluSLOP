@@ -1,34 +1,28 @@
-"""Check space activity for the last 90 days using the Viewtracker report endpoints.
+"""Check total views for each space using the Viewtracker report endpoint.
 
-Uses two endpoints per space:
-    /report/spaces/{spaceKey}/visitors      who viewed the space
-    /report/spaces/{spaceKey}/contributors  who contributed to the space
+    /report/spaces/{spaceKey}/visitors
 
-Both return one row per user with "views" and "lastViewDateFormatted".
-There is no date filter, so we load all rows and keep only users whose last view
-is within the last 90 days.
+The endpoint returns one row per user with "views". Total views of a space = sum of all rows.
 
 Results are saved to activity.json.
 """
 import json
-from datetime import datetime, timedelta, timezone
 
 from confluence_common import CONFLUENCE_URL, get_session, load_spacekeys
 
 RESULT_FILE = "activity.json"
-DAYS = 90
 
-# ADDED: ask for up to 30000 rows per call (the endpoint default is only 10)
+# ask for up to 30000 rows per call (the endpoint default is only 10)
 LIMIT = 30000
 
 # Put here whatever comes in the browser URL BEFORE "/report/spaces/..."
 # (for example "/rest/viewtracker/1.0"). Leave "" if the path starts directly with /report.
-VIEWTRACKER_BASE = ""
+VIEWTRACKER_BASE = "/rest/viewtracker/1.0"
 
 
-def get_report_rows(session, space_key, report):
-    """Load all rows of a report ('visitors' or 'contributors'), page by page."""
-    url = f"{CONFLUENCE_URL}{VIEWTRACKER_BASE}/report/spaces/{space_key}/{report}"
+def get_visitor_rows(session, space_key):
+    """Load all rows of the visitors report, page by page."""
+    url = f"{CONFLUENCE_URL}{VIEWTRACKER_BASE}/report/spaces/{space_key}/visitors"
     rows = []
     start = 0
 
@@ -38,7 +32,7 @@ def get_report_rows(session, space_key, report):
         data = response.json()
 
         if not data.get("success", True):
-            raise RuntimeError(f"Viewtracker error for {space_key}/{report}: {data.get('error')}")
+            raise RuntimeError(f"Viewtracker error for {space_key}: {data.get('error')}")
 
         results = data.get("results", [])
         rows.extend(results)
@@ -50,27 +44,9 @@ def get_report_rows(session, space_key, report):
     return rows
 
 
-def keep_recent(rows):
-    """Keep only rows where the user's last view is within the last DAYS days."""
-    limit_date = datetime.now(timezone.utc) - timedelta(days=DAYS)
-    recent = []
-    for row in rows:
-        # e.g. "2026-11-12T15:25:04.567+01:00"
-        last_view = datetime.fromisoformat(row["lastViewDateFormatted"])
-        if last_view >= limit_date:
-            recent.append(row)
-    return recent
-
-
-def get_activity(session, space_key):
-    visitors = keep_recent(get_report_rows(session, space_key, "visitors"))
-    contributors = keep_recent(get_report_rows(session, space_key, "contributors"))
-
-    return {
-        "visitors": len(visitors),                          # users who viewed in last 90 days
-        "views": sum(row["views"] for row in visitors),     # their total views (not only the last 90 days)
-        "contributors": len(contributors),                  # contributors active in last 90 days
-    }
+def get_total_views(session, space_key):
+    # CHANGED: only total views, contributors and the 90 day filter were removed
+    return sum(row["views"] for row in get_visitor_rows(session, space_key))
 
 
 if __name__ == "__main__":
@@ -78,10 +54,9 @@ if __name__ == "__main__":
     results = {}
 
     for space_key in load_spacekeys():
-        activity = get_activity(session, space_key)
-        results[space_key] = activity
-        print(f"{space_key}: {activity['visitors']} visitors, "
-              f"{activity['views']} views, {activity['contributors']} contributors")
+        views = get_total_views(session, space_key)
+        results[space_key] = {"views": views}
+        print(f"{space_key}: {views} views")
 
     with open(RESULT_FILE, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)

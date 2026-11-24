@@ -9,10 +9,10 @@ from html import escape
 
 from confluence_common import CONFLUENCE_URL, get_session, load_spacekeys
 
-REPORT_SPACE = "SEC"                      # space where the report page will live
+REPORT_SPACE = "TKR"                      # space where the report page will live
 REPORT_TITLE = "Confluence security report"
 PREVIEW_FILE = "report-preview.html"
-SCRIPT_VERSION = "v5 (AD in space / Yes-No status)"  # ADDED: shown in console and on the page
+SCRIPT_VERSION = "v6 (current groups / suggested groups / total views)"  # ADDED: shown in console and on the page
 
 
 def load_json(filename):
@@ -25,9 +25,8 @@ def load_json(filename):
 
 
 def build_table(space_keys, groups, activity):
-    # CHANGED: "Wrong groups" and "Missing groups" replaced by one "AD in space" column
-    header = ["Space key", "AD in space", "Status",
-              "Visitors (90d)", "Views (90d)", "Contributors (90d)"]
+    # CHANGED: new columns, same names as you asked for
+    header = ["Space key", "Status", "Current groups in space", "Suggested groups", "Total views"]
     rows = ["<tr>" + "".join(f"<th>{h}</th>" for h in header) + "</tr>"]
 
     for key in space_keys:
@@ -35,14 +34,12 @@ def build_table(space_keys, groups, activity):
         a = activity.get(key, {})
 
         # every cell is escaped, the groups are put one under another
-        # CHANGED: "AD in space" shows the groups currently in the space (key "current_groups")
         cells = [
             escape(key),
-            "<br/>".join(escape(name) for name in g.get("current_groups", [])),
             escape(g.get("status", "n/a")),
-            escape(str(a.get("visitors", "n/a"))),
+            "<br/>".join(escape(name) for name in g.get("current_groups", [])),
+            "<br/>".join(escape(name) for name in g.get("suggested_groups", [])),
             escape(str(a.get("views", "n/a"))),
-            escape(str(a.get("contributors", "n/a"))),
         ]
         rows.append("<tr>" + "".join(f"<td>{c}</td>" for c in cells) + "</tr>")
 
