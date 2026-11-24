@@ -12,7 +12,7 @@ from confluence_common import CONFLUENCE_URL, get_session, load_spacekeys
 REPORT_SPACE = "SEC"                      # space where the report page will live
 REPORT_TITLE = "Confluence security report"
 PREVIEW_FILE = "report-preview.html"
-SCRIPT_VERSION = "v7 (current groups / suggested groups / total views)"  # ADDED: shown in console and on the page
+SCRIPT_VERSION = "v8 (current groups / suggested groups / total views)"  # ADDED: shown in console and on the page
 
 
 def load_json(filename):
@@ -57,13 +57,17 @@ def check_response(response, action):
 
 
 def find_page(session, title):
-    """Return the existing report page (id + version) or None."""
+    """Return the existing report page (id + version) or None if it does not exist yet."""
     response = session.get(
         f"{CONFLUENCE_URL}/rest/api/content",
         params={"spaceKey": REPORT_SPACE, "title": title, "expand": "version"},
         timeout=30,
     )
-    check_response(response, f"Looking for the report page in space {REPORT_SPACE}")  # CHANGED
+    # CHANGED: 404 means "page not found" -> return None, so save_page() creates a new page.
+    # (If the space itself does not exist, creating the page fails with a clear message.)
+    if response.status_code == 404:
+        return None
+    check_response(response, f"Looking for the report page in space {REPORT_SPACE}")
     results = response.json()["results"]
     return results[0] if results else None
 
@@ -77,6 +81,7 @@ def save_page(session, title, body):
     }
 
     existing = find_page(session, title)
+    # ADDED: page exists -> update it (new version), page does not exist -> create it
     if existing:
         payload["version"] = {"number": existing["version"]["number"] + 1}
         response = session.put(
