@@ -6,11 +6,12 @@ Expected groups for space ABC (case does not matter):
     sec-confluence-ABC-Admin
 
 Status:
-    Yes                all three groups exist and nothing else (no other groups, no users)
-    No                 all three groups exist, but other groups or users are in the space too
+    Yes                all three groups are in the space, no other groups
+    No                 all three groups are in the space, but there are other groups too
     missing AD groups  one or more of the three groups are not in the space
                        (if both apply, "missing AD groups" wins)
 
+Only groups are checked. Users added directly are ignored.
 Results are saved to groups.json.
 
 To see exactly what Confluence returns for one space (useful when results look wrong):
@@ -23,6 +24,10 @@ from confluence_common import CONFLUENCE_URL, get_session, load_spacekeys
 
 RESULT_FILE = "groups.json"
 
+# CHANGED: groups that are allowed in every space besides the three AD groups.
+# Example: ALLOWED_EXTRA_GROUPS = ["sec-confluence-users"]
+ALLOWED_EXTRA_GROUPS = []
+
 
 class GroupNameChecker:
     """Knows the naming convention and compares it with the groups found in a space."""
@@ -32,13 +37,14 @@ class GroupNameChecker:
     def expected_groups(self, space_key):
         return [f"sec-confluence-{space_key}-{suffix}" for suffix in self.SUFFIXES]
 
-    def check(self, space_key, found_groups, found_users=()):
+    def check(self, space_key, found_groups):
         # Names are compared in lowercase, so the check is NOT case sensitive
         expected = {name.lower() for name in self.expected_groups(space_key)}
+        allowed = {name.lower() for name in ALLOWED_EXTRA_GROUPS}
         found = {name.lower() for name in found_groups}
 
-        missing = expected - found                 # expected groups not in the space
-        wrong = (found - expected) or found_users  # other groups, or users added directly
+        missing = expected - found                # expected groups not in the space
+        wrong = found - expected - allowed        # any other group
 
         if missing:
             status = "missing AD groups"
@@ -47,19 +53,17 @@ class GroupNameChecker:
         else:
             status = "Yes"
 
-        # CHANGED: only the current groups and the status are saved (no wrong/missing lists)
-        current = sorted(found_groups) + [f"user: {user}" for user in sorted(found_users)]
-        return {"current_groups": current, "status": status}
+        # CHANGED: users are no longer part of the check or of the result
+        return {"current_groups": sorted(found_groups), "status": status}
 
 
 def get_permissions(session, space_key):
-    """Load all permission entries of a space (Confluence 9.1+ endpoint)."""
+    """Load all permission entries of a space (Confluence 9.1+ endpoint), page by page."""
     url = f"{CONFLUENCE_URL}/rest/api/space/{space_key}/permissions"
     limit = 1000
     start = 0
     all_entries = []
 
-    # CHANGED: load page by page, the first page alone may not hold every group
     while True:
         response = session.get(url, params={"start": start, "limit": limit}, timeout=60)
         response.raise_for_status()
@@ -78,10 +82,9 @@ def get_permissions(session, space_key):
     return all_entries
 
 
-def get_space_subjects(session, space_key):
-    """Return (group names, user names) that have any permission in the space."""
+def get_space_groups(session, space_key):
+    """Return the names of all groups that have any permission in the space."""
     groups = set()
-    users = set()
 
     for permission in get_permissions(session, space_key):
         # Each item looks like:
@@ -90,16 +93,10 @@ def get_space_subjects(session, space_key):
         subject = permission.get("subject", {})
         if subject.get("type") == "group":
             groups.add(subject["name"])
-        elif subject.get("type") == "user":
-            # CHANGED: try more fields, the name field differs between versions
-            name = (subject.get("name") or subject.get("username") or subject.get("displayName")
-                    or subject.get("publicName") or subject.get("userKey") or "unknown user")
-            users.add(name)
-    return groups, users
+    return groups
 
 
 if __name__ == "__main__":
-    # ADDED: --raw SPACEKEY prints what Confluence sends back, then exits
     parser = argparse.ArgumentParser()
     parser.add_argument("--raw", metavar="SPACEKEY", help="print raw permissions of one space")
     args = parser.parse_args()
@@ -114,11 +111,12 @@ if __name__ == "__main__":
     results = {}
 
     for space_key in load_spacekeys():
-        groups, users = get_space_subjects(session, space_key)
-        result = checker.check(space_key, groups, users)
+        groups = get_space_groups(session, space_key)
+        result = checker.check(space_key, groups)
 
         results[space_key] = result
-        print(f"{space_key}: {result['status']}")
+        # CHANGED: also print the groups that were found, so you can see why a status was set
+        print(f"{space_key}: {result['status']}  | groups found: {', '.join(result['current_groups']) or '-'}")
 
     with open(RESULT_FILE, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)

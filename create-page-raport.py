@@ -12,6 +12,7 @@ from confluence_common import CONFLUENCE_URL, get_session, load_spacekeys
 REPORT_SPACE = "SEC"                      # space where the report page will live
 REPORT_TITLE = "Confluence security report"
 PREVIEW_FILE = "report-preview.html"
+SCRIPT_VERSION = "v5 (AD in space / Yes-No status)"  # ADDED: shown in console and on the page
 
 
 def load_json(filename):
@@ -89,7 +90,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     table = build_table(load_spacekeys(), load_json("groups.json"), load_json("activity.json"))
-    body = f"<p>Generated: {date.today().isoformat()}</p>{table}"
+    body = f"<p>Generated: {date.today().isoformat()} - script {SCRIPT_VERSION}</p>{table}"
+    print(f"Running create-page-raport.py {SCRIPT_VERSION}")
 
     if args.dry_run:
         # ADDED: save the page content locally so you can check it

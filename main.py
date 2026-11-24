@@ -12,6 +12,7 @@ If any script fails we stop, so the report is never built from partial data.
 import argparse
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 # ADDED: each check script and the file it creates
@@ -50,7 +51,9 @@ if __name__ == "__main__":
     for script, output_file in CHECKS:
         # ADDED: skip the check when its file already exists (unless --fetch)
         if not args.fetch and (SCRIPT_DIR / output_file).exists():
-            print(f"\nSKIPPED: {script} - using existing {output_file}")
+            # ADDED: show when the file was created, so old data is easy to spot
+            created = datetime.fromtimestamp((SCRIPT_DIR / output_file).stat().st_mtime)
+            print(f"\nSKIPPED: {script} - using existing {output_file} (created {created:%Y-%m-%d %H:%M})")
             continue
 
         if not run_script(script):
