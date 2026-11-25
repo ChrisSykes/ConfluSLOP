@@ -12,7 +12,7 @@ from confluence_common import CONFLUENCE_URL, get_session, load_spacekeys
 REPORT_SPACE = "SEC"                      # space where the report page will live
 REPORT_TITLE = "Confluence security report"
 PREVIEW_FILE = "report-preview.html"
-SCRIPT_VERSION = "v8 (current groups / suggested groups / total views)"  # ADDED: shown in console and on the page
+SCRIPT_VERSION = "v9 (current groups / suggested groups / total views)"  # ADDED: shown in console and on the page
 
 
 def load_json(filename):
@@ -48,12 +48,24 @@ def build_table(space_keys, groups, activity):
 
 # ADDED: shows the HTTP code and the message from Confluence instead of a bare error
 def check_response(response, action):
-    if not response.ok:
-        raise SystemExit(
-            f"{action} failed: HTTP {response.status_code}\n"
-            f"{response.text[:500]}\n\n"
-            f"Check that REPORT_SPACE = '{REPORT_SPACE}' is a real space key and that the user "
-            f"of the token can view the space and create pages in it.")
+    if response.ok:
+        return
+
+    sent = response.request  # the request that was really sent (after redirects)
+    body = sent.body.decode("utf-8", "replace") if isinstance(sent.body, bytes) else (sent.body or "")
+    redirects = [f"{r.status_code} {r.url}" for r in response.history] or ["none"]
+
+    raise SystemExit(
+        f"{action} failed: HTTP {response.status_code}\n"
+        f"{response.text[:500]}\n\n"
+        f"What was sent:\n"
+        f"  {sent.method} {sent.url}\n"
+        f"  Content-Type: {sent.headers.get('Content-Type')}\n"
+        f"  Body size: {len(body)} characters\n"
+        f"  Body starts with: {body[:120]}\n"
+        f"  Redirects followed: {', '.join(redirects)}\n\n"
+        f"Check that REPORT_SPACE = '{REPORT_SPACE}' is a real space key and that the user "
+        f"of the token can view the space and create pages in it.")
 
 
 def find_page(session, title):
